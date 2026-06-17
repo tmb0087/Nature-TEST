@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>自然科線上測驗系統</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">自然各單元</p>
+      <h1>智慧線上測驗網站</h1>
+    </div>
+    <nav class="nav-pills" aria-label="主要功能">
+      <button class="nav-pill active" data-view="quiz">測驗</button>
+      <button class="nav-pill" data-view="review">圖解攻略</button>
+      <button class="nav-pill" data-view="wrong">錯題本</button>
+      <button class="nav-pill" data-view="upload">圖片出題</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="quizView" class="view active">
+      <div class="workspace">
+        <aside class="panel controls-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Practice Mode</p>
+            <h2>選擇測驗</h2>
+          </div>
+
+          <label class="field">
+            <span>測驗模式</span>
+            <select id="modeSelect">
+              <option value="unit">單元練習</option>
+              <option value="mock">全單元模擬考</option>
+              <option value="mixed">綜合隨機抽題</option>
+              <option value="wrong">錯題重複測驗</option>
+            </select>
+          </label>
+
+          <label class="field" id="unitField">
+            <span>指定單元</span>
+            <select id="unitSelect"></select>
+          </label>
+
+          <label class="field">
+            <span>題數</span>
+            <select id="countSelect">
+              <option>5</option>
+              <option>10</option>
+              <option selected>20</option>
+              <option>30</option>
+              <option>40</option>
+            </select>
+          </label>
+
+          <div class="button-row">
+            <button id="startBtn" class="primary-btn">開始測驗</button>
+            <button id="regenBtn" class="ghost-btn">重新生成題目</button>
+          </div>
+
+          <div class="stats-strip">
+            <div>
+              <strong id="wrongCount">0</strong>
+              <span>錯題記錄</span>
+            </div>
+            <div>
+              <strong id="savedRuns">0</strong>
+              <span>測驗紀錄</span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel quiz-panel">
+          <div id="emptyState" class="empty-state">
+            <div class="orb">Q</div>
+            <h2>先選單元，再開始挑戰</h2>
+            <p>系統會依照圖片中的圖解攻略概念，即時生成選擇題、解析與錯題回顧。</p>
+          </div>
+
+          <div id="quizBox" class="quiz-box hidden">
+            <div class="quiz-meta">
+              <span id="quizModeLabel">單元練習</span>
+              <span id="timer">00:00</span>
+              <span id="progress">1 / 20</span>
+            </div>
+            <div class="progressbar"><span id="progressbarFill"></span></div>
+            <p id="questionUnit" class="question-unit"></p>
+            <h2 id="questionText"></h2>
+            <div id="options" class="options"></div>
+            <div id="feedback" class="feedback hidden"></div>
+            <div class="quiz-actions">
+              <button id="nextBtn" class="primary-btn" disabled>下一題</button>
+            </div>
+          </div>
+
+          <div id="reportBox" class="report hidden"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="reviewView" class="view">
+      <div class="review-layout">
+        <aside class="panel unit-list" id="reviewUnitList"></aside>
+        <section class="panel guide-card">
+          <div id="guideContent"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="wrongView" class="view">
+      <section class="panel">
+        <div class="panel-heading inline">
+          <div>
+            <p class="eyebrow">Mistake Notebook</p>
+            <h2>錯題記錄與解析</h2>
+          </div>
+          <button id="clearWrongBtn" class="ghost-btn">清空錯題</button>
+        </div>
+        <div id="wrongList" class="wrong-list"></div>
+      </section>
+    </section>
+
+    <section id="uploadView" class="view">
+      <section class="panel upload-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Image To Quiz</p>
+          <h2>多張圖片上傳出題</h2>
+        </div>
+        <p class="muted">可一次上傳多張課本頁或筆記圖。若瀏覽器可載入 OCR 套件，會嘗試辨識文字；否則可貼上圖片中的重點文字後生成題目。</p>
+        <input id="imageInput" class="file-input" type="file" accept="image/*" multiple>
+        <textarea id="uploadText" placeholder="也可以在這裡貼上圖片中的重點文字，例如：植物的根可固定植物並吸收水分和礦物質。"></textarea>
+        <div class="button-row">
+          <button id="ocrBtn" class="ghost-btn">嘗試辨識圖片文字</button>
+          <button id="makeUploadQuizBtn" class="primary-btn">依圖片內容生成題目</button>
+        </div>
+        <p id="ocrStatus" class="ocr-status" aria-live="polite"></p>
+        <div id="uploadPreview" class="upload-grid"></div>
+      </section>
+    </section>
+  </main>
+
+  <template id="wrongItemTemplate">
+    <article class="wrong-item">
+      <div>
+        <p class="question-unit"></p>
+        <h3></h3>
+        <p class="muted answer-line"></p>
+        <p class="analysis"></p>
+      </div>
+      <button class="ghost-btn small">移除</button>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
