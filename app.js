@@ -68,7 +68,7 @@ const units = [
     image: "6.jpg",
     summary: "水溶液、酸鹼性、導電性、空氣組成與性質。",
     sections: [
-      ["水", ["物質可形成水溶液或非水溶液。", "水溶液可分飽和溶液與未飽和溶液。", "酸鹼性可用酸鹼指示劑判斷，也可能呈酸鹼中和。", "有些水溶液具有導電性。"]],
+      ["水", ["物質可形成水溶液或非水溶液。", "水溶液可分飽和溶液與未飽和溶液。", "水溶液可呈酸性、鹼性或中性，並可用酸鹼指示劑判斷。", "酸和鹼混合時可能發生中和反應。", "有些水溶液具有導電性。"]],
       ["空氣", ["空氣組成包含氮氣、氧氣與二氧化碳等。", "氧氣有特定製造方法與性質，二氧化碳也有製造方法與性質。", "空氣具有占有空間、可壓縮等性質。"]]
     ]
   },
@@ -190,12 +190,20 @@ function extractKeyword(text) {
   return candidates[0] || text.slice(0, 10);
 }
 
+function selectDistractors(concept, sourcePool, size = 3) {
+  const differentSections = sourcePool.filter((item) => item.text !== concept.text && item.section !== concept.section);
+  const differentUnits = sourcePool.filter((item) => item.text !== concept.text && item.unit.id !== concept.unit.id);
+  const fallback = sourcePool.filter((item) => item.text !== concept.text);
+  const pool = differentSections.length >= size ? differentSections : differentUnits.length >= size ? differentUnits : fallback;
+  return shuffle(pool).slice(0, size);
+}
+
 function makeQuestion(concept, sourcePool, index) {
-  const distractors = shuffle(sourcePool.filter((item) => item.text !== concept.text)).slice(0, 3);
+  const distractors = selectDistractors(concept, sourcePool, 3);
   const keyword = extractKeyword(concept.text);
   const patterns = [
     () => ({
-      prompt: `關於「${concept.section}」的重點，下列哪一項正確？`,
+      prompt: `題目線索是「${keyword}」。下列哪一項最符合這個線索？`,
       answer: concept.text,
       options: shuffle([concept.text, ...distractors.map((d) => d.text)])
     }),
@@ -205,12 +213,12 @@ function makeQuestion(concept, sourcePool, index) {
       options: shuffle([concept.text, ...distractors.map((d) => d.text)])
     }),
     () => ({
-      prompt: `哪一個敘述最能代表第 ${concept.unit.id} 單元「${concept.unit.title}」中的「${concept.section}」？`,
+      prompt: `在第 ${concept.unit.id} 單元「${concept.title || concept.unit.title}」的「${concept.section}」中，哪一句最能對應「${keyword}」？`,
       answer: concept.text,
       options: shuffle([concept.text, ...distractors.map((d) => d.text)])
     }),
     () => ({
-      prompt: `小組討論「${concept.unit.title}」時，哪一句可以作為正確筆記？`,
+      prompt: `複習「${concept.unit.title}」時，若看到關鍵詞「${keyword}」，應選哪一項說明？`,
       answer: concept.text,
       options: shuffle([concept.text, ...distractors.map((d) => d.text)])
     })
