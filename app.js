@@ -159,6 +159,7 @@ let timerId = null;
 let startTime = 0;
 let selectedReviewUnit = units[0].id;
 let uploadedFiles = [];
+let selectedDifficulty = "basic";
 
 const stateKeys = {
   wrong: "scienceQuizWrongItems",
@@ -198,49 +199,64 @@ function selectDistractors(concept, sourcePool, size = 3) {
   return shuffle(pool).slice(0, size);
 }
 
-function makeQuestion(concept, sourcePool, index) {
+function buildOptions(answer, distractors) {
+  const uniqueDistractors = distractors.map((item) => item.text)
+    .filter(Boolean)
+    .filter((item) => item !== answer)
+    .filter((item, index, array) => array.indexOf(item) === index);
+  return shuffle([answer, ...shuffle(uniqueDistractors).slice(0, 3)]);
+}
+
+function difficultyLabel(difficulty = selectedDifficulty) {
+  return {
+    basic: "基礎",
+    advanced: "進階",
+    expert: "專業"
+  }[difficulty] || "基礎";
+}
+
+function makeQuestion(concept, sourcePool, index, difficulty = selectedDifficulty) {
   const distractors = selectDistractors(concept, sourcePool, 3);
   const keyword = extractKeyword(concept.text);
-  const patterns = [
-    () => ({
-      prompt: `題目線索是「${keyword}」。下列哪一項最符合這個線索？`,
-      answer: concept.text,
-      options: shuffle([concept.text, ...distractors.map((d) => d.text)])
-    }),
-    () => ({
-      prompt: `如果題目提到「${keyword}」，最適合連結到哪個觀念？`,
-      answer: concept.text,
-      options: shuffle([concept.text, ...distractors.map((d) => d.text)])
-    }),
-    () => ({
-      prompt: `在第 ${concept.unit.id} 單元「${concept.title || concept.unit.title}」的「${concept.section}」中，哪一句最能對應「${keyword}」？`,
-      answer: concept.text,
-      options: shuffle([concept.text, ...distractors.map((d) => d.text)])
-    }),
-    () => ({
-      prompt: `複習「${concept.unit.title}」時，若看到關鍵詞「${keyword}」，應選哪一項說明？`,
-      answer: concept.text,
-      options: shuffle([concept.text, ...distractors.map((d) => d.text)])
-    })
-  ];
-  const made = patterns[(Date.now() + index + Math.floor(Math.random() * 99)) % patterns.length]();
+  const options = buildOptions(concept.text, distractors);
+  const patternBank = {
+    basic: [
+      () => `題目線索是「${keyword}」。下列哪一項最符合這個線索？`,
+      () => `在「${concept.section}」中，哪一句是正確的重點整理？`,
+      () => `複習「${concept.unit.title}」時，若看到關鍵詞「${keyword}」，應選哪一項說明？`
+    ],
+    advanced: [
+      () => `同學正在整理「${concept.section}」筆記，哪一句最能補上「${keyword}」這個重點？`,
+      () => `若考題要求判斷第 ${concept.unit.id} 單元「${concept.unit.title}」中的「${concept.section}」，哪個觀念最適合？`,
+      () => `下列四個概念都可能出現在自然科，哪一項最符合「${concept.unit.title}／${concept.section}」？`
+    ],
+    expert: [
+      () => `專業挑戰：若要避免把「${concept.section}」和其他單元概念混淆，哪一項判讀最精確？`,
+      () => `綜合判斷題：看到「${keyword}」時，哪一個選項最能精準對應第 ${concept.unit.id} 單元的核心概念？`,
+      () => `高階辨析：四個選項都可能是課本概念，但哪一項才是「${concept.section}」在本題中的最佳答案？`
+    ]
+  };
+  const patterns = patternBank[difficulty] || patternBank.basic;
+  const prompt = patterns[(Date.now() + index + Math.floor(Math.random() * 99)) % patterns.length]();
   return {
     id: `${concept.unit.id}-${index}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     unitId: concept.unit.id,
     unitTitle: concept.unit.title,
     section: concept.section,
-    question: made.prompt,
-    options: made.options,
-    answer: made.answer,
-    explanation: `解析：本題核心是「${concept.section}」。${concept.text} 其他選項雖然也可能是自然科概念，但不符合這題指定的單元或關鍵脈絡。`
+    difficulty,
+    question: prompt,
+    options,
+    answer: concept.text,
+    explanation: `解析：本題難度為「${difficultyLabel(difficulty)}」，核心是「${concept.section}」。${concept.text} 其他選項雖然也可能是自然科概念，但不符合這題指定的單元、線索或關鍵脈絡。`
   };
 }
 
-function generateQuiz(mode, unitId, count) {
+function generateQuiz(mode, unitId, count, difficulty = selectedDifficulty) {
   const wrongItems = storage.get(stateKeys.wrong, []);
   if (mode === "wrong") {
     return shuffle(wrongItems).slice(0, count).map((item, index) => ({
       ...item,
+      difficulty: item.difficulty || difficulty,
       id: `wrong-${index}-${Date.now()}`
     }));
   }
@@ -260,7 +276,7 @@ function generateQuiz(mode, unitId, count) {
   const result = [];
   for (let i = 0; i < count; i += 1) {
     const concept = chosen[i % chosen.length];
-    result.push(makeQuestion(concept, pool, i));
+    result.push(makeQuestion(concept, pool, i, difficulty));
   }
   return result;
 }
@@ -282,6 +298,15 @@ function bindEvents() {
   byId("modeSelect").addEventListener("change", () => {
     const mode = byId("modeSelect").value;
     byId("unitField").classList.toggle("hidden", mode !== "unit");
+  });
+
+  document.querySelectorAll(".difficulty-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedDifficulty = button.dataset.difficulty;
+      document.querySelectorAll(".difficulty-btn").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+    });
   });
 
   byId("startBtn").addEventListener("click", startQuiz);
@@ -315,7 +340,7 @@ function startQuiz() {
   const mode = byId("modeSelect").value;
   const count = Number(byId("countSelect").value);
   const unitId = Number(byId("unitSelect").value);
-  quiz = generateQuiz(mode, unitId, count);
+  quiz = generateQuiz(mode, unitId, count, selectedDifficulty);
   if (!quiz.length) {
     alert("目前沒有錯題可重複測驗，先完成一次測驗後再回來挑戰。");
     return;
@@ -328,7 +353,7 @@ function startQuiz() {
   byId("emptyState").classList.add("hidden");
   byId("reportBox").classList.add("hidden");
   byId("quizBox").classList.remove("hidden");
-  byId("quizModeLabel").textContent = modeLabel(mode);
+  byId("quizModeLabel").textContent = `${modeLabel(mode)}｜${difficultyLabel(selectedDifficulty)}`;
   renderQuestion();
 }
 
@@ -357,7 +382,7 @@ function renderQuestion() {
   const item = quiz[current];
   byId("progress").textContent = `${current + 1} / ${quiz.length}`;
   byId("progressbarFill").style.width = `${((current) / quiz.length) * 100}%`;
-  byId("questionUnit").textContent = `第${item.unitId || "-"}單元｜${item.unitTitle || "上傳圖片題組"}｜${item.section || "重點整理"}`;
+  byId("questionUnit").textContent = `第${item.unitId || "-"}單元｜${item.unitTitle || "上傳圖片題組"}｜${item.section || "重點整理"}｜${difficultyLabel(item.difficulty)}`;
   byId("questionText").textContent = item.question;
   byId("feedback").classList.add("hidden");
   byId("feedback").textContent = "";
@@ -414,7 +439,7 @@ function finishQuiz() {
   byId("quizBox").classList.add("hidden");
   const rows = answers.map((item, index) => `
     <article class="review-row ${item.correct ? "correct" : "wrong"}">
-      <p class="question-unit">第 ${index + 1} 題｜${item.unitTitle}｜${item.section}</p>
+      <p class="question-unit">第 ${index + 1} 題｜${item.unitTitle}｜${item.section}｜${difficultyLabel(item.difficulty)}</p>
       <h3>${item.question}</h3>
       <p class="muted">你的答案：${item.choice || "未作答"}｜正確答案：${item.answer}</p>
       <p>${item.explanation}</p>
@@ -449,6 +474,7 @@ function saveWrong(item) {
     options: item.options,
     answer: item.answer,
     explanation: item.explanation,
+    difficulty: item.difficulty,
     choice: item.choice
   };
   const exists = wrong.some((old) => old.question === normalized.question && old.answer === normalized.answer);
@@ -465,7 +491,7 @@ function renderWrongList() {
   list.innerHTML = wrong.map((item, index) => `
     <article class="wrong-item">
       <div>
-        <p class="question-unit">第${item.unitId || "-"}單元｜${item.unitTitle || "圖片題組"}｜${item.section || "重點整理"}</p>
+        <p class="question-unit">第${item.unitId || "-"}單元｜${item.unitTitle || "圖片題組"}｜${item.section || "重點整理"}｜${difficultyLabel(item.difficulty)}</p>
         <h3>${item.question}</h3>
         <p class="muted answer-line">你的答案：${item.choice || "未記錄"}｜正確答案：${item.answer}</p>
         <p class="analysis">${item.explanation}</p>
@@ -527,37 +553,64 @@ async function runOcr() {
   const status = byId("ocrStatus");
   byId("ocrBtn").disabled = true;
   byId("ocrBtn").textContent = "辨識中...";
-  status.textContent = "正在載入繁體中文辨識模型...";
+  status.textContent = "正在準備圖片辨識...";
   let worker = null;
   try {
-    if (!window.Tesseract) {
-      await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
-    }
-    worker = await createOcrWorker((message) => {
-      if (message.status === "recognizing text") {
-        status.textContent = `正在辨識文字 ${Math.round((message.progress || 0) * 100)}%`;
-      }
-    });
     const parts = [];
     for (const [index, file] of uploadedFiles.entries()) {
-      status.textContent = `正在預處理第 ${index + 1} / ${uploadedFiles.length} 張圖片...`;
-      const image = await preprocessImageForOcr(file);
       status.textContent = `正在辨識第 ${index + 1} / ${uploadedFiles.length} 張圖片...`;
-      const result = await worker.recognize(image);
-      const text = cleanOcrText(result.data.text);
+      let text = await recognizeWithNativeDetector(file);
+      if (!text) {
+        if (!worker) {
+          status.textContent = "正在載入繁體中文 OCR 模型...";
+          await loadTesseractLibrary();
+          worker = await createOcrWorker((message) => {
+            if (message.status === "recognizing text") {
+              status.textContent = `正在辨識第 ${index + 1} 張圖片 ${Math.round((message.progress || 0) * 100)}%`;
+            }
+          });
+        }
+        text = await recognizeWithTesseract(worker, file, (message) => {
+          status.textContent = `第 ${index + 1} 張圖片：${message}`;
+        });
+      }
       if (text) parts.push(`【${file.name}】\n${text}`);
     }
     byId("uploadText").value = [byId("uploadText").value, ...parts].filter(Boolean).join("\n");
-    status.textContent = parts.length ? "辨識完成，已整理文字並放入文字框。" : "辨識完成，但沒有抓到可用文字，請改用更清晰的圖片或手動貼上重點。";
+    status.textContent = parts.length ? "辨識完成，已整理文字並放入文字框。請快速檢查文字後再生成題目。" : "辨識完成，但沒有抓到可用文字。請改用正面、清晰、無反光圖片，或手動貼上重點文字。";
   } catch (error) {
     console.error(error);
     status.textContent = "OCR 無法完成。請確認網路可載入繁中模型，或手動貼上圖片重點文字。";
     alert("OCR 套件或繁中模型無法載入，或圖片辨識失敗。你仍可手動貼上圖片重點文字後生成題目。");
   } finally {
-    if (worker) await worker.terminate();
+    if (worker) {
+      try {
+        await worker.terminate();
+      } catch (error) {
+        console.warn(error);
+      }
+    }
     byId("ocrBtn").disabled = false;
     byId("ocrBtn").textContent = "嘗試辨識圖片文字";
   }
+}
+
+async function loadTesseractLibrary() {
+  if (window.Tesseract) return;
+  const sources = [
+    "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
+    "https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"
+  ];
+  let lastError;
+  for (const src of sources) {
+    try {
+      await loadScript(src);
+      if (window.Tesseract) return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Tesseract 載入失敗");
 }
 
 async function createOcrWorker(logger) {
@@ -570,46 +623,155 @@ async function createOcrWorker(logger) {
   await worker.setParameters({
     tessedit_pageseg_mode: "6",
     preserve_interword_spaces: "1",
-    user_defined_dpi: "300"
+    user_defined_dpi: "300",
+    tessedit_char_blacklist: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
   });
   return worker;
 }
 
-async function preprocessImageForOcr(file) {
+async function recognizeWithNativeDetector(file) {
+  if (!("TextDetector" in window)) return "";
+  try {
+    const detector = new TextDetector();
+    const variants = [
+      file,
+      await preprocessImageForOcr(file, "contrast", 0),
+      await preprocessImageForOcr(file, "sharp", 0)
+    ];
+    const results = [];
+    for (const variant of variants) {
+      const bitmap = await createImageBitmap(variant);
+      const detected = await detector.detect(bitmap);
+      results.push(cleanOcrText(detected.map((item) => item.rawValue || item.detectedText || "").join("\n")));
+    }
+    return pickBestOcrText(results);
+  } catch (error) {
+    console.warn(error);
+    return "";
+  }
+}
+
+async function recognizeWithTesseract(worker, file, onProgress = () => {}) {
+  const variants = await buildOcrVariants(file);
+  const pageSegModes = ["6", "11", "4", "3"];
+  const results = [];
+  for (const [modeIndex, pageSegMode] of pageSegModes.entries()) {
+    await worker.setParameters({ tessedit_pageseg_mode: pageSegMode });
+    for (const [variantIndex, variant] of variants.entries()) {
+      onProgress(`辨識策略 ${modeIndex + 1}/${pageSegModes.length}，影像版本 ${variantIndex + 1}/${variants.length}`);
+      const result = await worker.recognize(variant.image);
+      results.push({
+        text: cleanOcrText(result.data.text),
+        weight: variant.weight
+      });
+    }
+  }
+  return pickBestOcrText(results);
+}
+
+async function buildOcrVariants(file) {
+  return [
+    { image: file, weight: 0 },
+    { image: await preprocessImageForOcr(file, "contrast", 0), weight: 2 },
+    { image: await preprocessImageForOcr(file, "sharp", 0), weight: 3 },
+    { image: await preprocessImageForOcr(file, "binary", 0), weight: 1 },
+    { image: await preprocessImageForOcr(file, "contrast", 90), weight: -2 },
+    { image: await preprocessImageForOcr(file, "contrast", 270), weight: -2 }
+  ];
+}
+
+async function preprocessImageForOcr(file, mode = "contrast", rotation = 0) {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(3, Math.max(1.6, 2400 / Math.max(bitmap.width, bitmap.height)));
+  const scale = Math.min(4, Math.max(1.8, 3200 / Math.max(bitmap.width, bitmap.height)));
+  const rotated = rotation === 90 || rotation === 270;
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
+  canvas.width = Math.round((rotated ? bitmap.height : bitmap.width) * scale);
+  canvas.height = Math.round((rotated ? bitmap.width : bitmap.height) * scale);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rotation * Math.PI / 180);
+  ctx.drawImage(bitmap, -bitmap.width * scale / 2, -bitmap.height * scale / 2, bitmap.width * scale, bitmap.height * scale);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.55 + 128));
-    const cleaned = contrasted > 238 ? 255 : contrasted < 58 ? 0 : contrasted;
+    const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.75 + 138));
+    const cleaned = mode === "binary" ? (contrasted > 158 ? 255 : 0) : (contrasted > 244 ? 255 : contrasted < 46 ? 0 : contrasted);
     data[i] = cleaned;
     data[i + 1] = cleaned;
     data[i + 2] = cleaned;
   }
+  if (mode === "sharp") {
+    sharpenImageData(imageData);
+  }
   ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL("image/png");
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob || canvas.toDataURL("image/png")), "image/png");
+  });
+}
+
+function sharpenImageData(imageData) {
+  const { data, width, height } = imageData;
+  const copy = new Uint8ClampedArray(data);
+  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      let value = 0;
+      let k = 0;
+      for (let ky = -1; ky <= 1; ky += 1) {
+        for (let kx = -1; kx <= 1; kx += 1) {
+          const source = ((y + ky) * width + (x + kx)) * 4;
+          value += copy[source] * kernel[k];
+          k += 1;
+        }
+      }
+      const target = (y * width + x) * 4;
+      const next = Math.max(0, Math.min(255, value));
+      data[target] = next;
+      data[target + 1] = next;
+      data[target + 2] = next;
+    }
+  }
+}
+
+function pickBestOcrText(results) {
+  const normalized = results
+    .map((item) => typeof item === "string" ? { text: item, weight: 0 } : item)
+    .filter((item) => item && item.text);
+  return normalized
+    .sort((a, b) => scoreOcrText(b.text, b.weight) - scoreOcrText(a.text, a.weight))[0]?.text || "";
+}
+
+function scoreOcrText(text, weight = 0) {
+  const chinese = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const usefulMarks = (text.match(/[。；：，、\n]/g) || []).length;
+  const scienceWords = (text.match(/單元|圖解|攻略|作用|系統|細胞|能量|物質|生物|空氣|地表|天氣|電路|月球|太陽|植物|動物/g) || []).length;
+  const noise = (text.match(/[A-Za-z]{4,}|\d{6,}|[|{}_=~`^]/g) || []).length;
+  return chinese * 2 + usefulMarks + scienceWords * 8 - noise * 5 + Math.min(text.length, 1600) / 100 + weight;
 }
 
 function cleanOcrText(text) {
   return text
     .normalize("NFKC")
     .replace(/[^\u3400-\u9fff\uf900-\ufaffA-Za-z0-9０-９，。！？、；：:（）()「」『』《》【】+\-→←%℃°\n\r\t ./]/g, " ")
+    .replace(/[A-Za-z]{8,}/g, " ")
+    .replace(/\b\d{7,}\b/g, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line && scoreOcrLine(line) >= 2)
     .join("\n");
+}
+
+function scoreOcrLine(line) {
+  const chinese = (line.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const noise = (line.match(/[A-Za-z]{5,}|\d{6,}|[|{}_=~`^]/g) || []).length;
+  return chinese - noise * 3 + Math.min(line.length, 30) / 10;
 }
 
 function loadScript(src) {
@@ -643,7 +805,7 @@ function makeQuizFromUpload() {
     text: point
   }));
   const count = Math.min(Number(byId("countSelect").value), Math.max(5, concepts.length));
-  quiz = Array.from({ length: count }, (_, index) => makeQuestion(concepts[index % concepts.length], concepts.concat(allConcepts()), index));
+  quiz = Array.from({ length: count }, (_, index) => makeQuestion(concepts[index % concepts.length], concepts.concat(allConcepts()), index, selectedDifficulty));
   current = 0;
   answers = [];
   startTime = Date.now();
@@ -653,7 +815,7 @@ function makeQuizFromUpload() {
   byId("emptyState").classList.add("hidden");
   byId("reportBox").classList.add("hidden");
   byId("quizBox").classList.remove("hidden");
-  byId("quizModeLabel").textContent = modeLabel("upload");
+  byId("quizModeLabel").textContent = `${modeLabel("upload")}｜${difficultyLabel(selectedDifficulty)}`;
   renderQuestion();
 }
 

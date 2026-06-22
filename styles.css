@@ -168,6 +168,31 @@ textarea {
   flex-wrap: wrap;
 }
 
+.difficulty-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .72);
+}
+
+.difficulty-btn {
+  min-height: 42px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+}
+
+.difficulty-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--teal), var(--blue));
+  box-shadow: 0 10px 22px rgba(15, 159, 154, .22);
+}
+
 .primary-btn,
 .ghost-btn {
   border-radius: 14px;
